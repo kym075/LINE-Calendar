@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#06c755" />
+    <title>かんたん家計簿</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.19/locales/ja.global.min.js" defer></script>
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <p class="app-label">MONTHLY EXPENSES</p>
+        <h1>かんたん家計簿</h1>
+        <p class="app-description">日付をタップして支出明細を確認できます</p>
+      </header>
+
+      <section class="calendar-card" aria-label="月間支出カレンダー">
+        <div id="calendar-loading" class="calendar-loading" role="status" aria-live="polite">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          <p class="loading-message">カレンダーを読み込んでいます</p>
+        </div>
+        <div id="calendar"></div>
+      </section>
+    </main>
+
+    <div id="expense-modal" class="modal" aria-hidden="true">
+      <div class="modal__backdrop" data-modal-close></div>
+      <section
+        class="modal__dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <div class="modal__header">
+          <div>
+            <p class="modal__eyebrow">支出明細</p>
+            <h2 id="modal-title"></h2>
+          </div>
+          <button class="modal__close" type="button" aria-label="閉じる" data-modal-close>
+            ×
+          </button>
+        </div>
+
+        <div id="expense-list" class="expense-list"></div>
+
+        <div class="daily-total">
+          <span>この日の合計</span>
+          <strong id="daily-total-amount">¥0</strong>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
