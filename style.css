@@ -25,6 +25,12 @@ button {
   font: inherit;
 }
 
+input,
+select,
+textarea {
+  font: inherit;
+}
+
 .app-shell {
   width: min(100%, 720px);
   margin: 0 auto;
@@ -339,6 +345,41 @@ h1 {
   white-space: nowrap;
 }
 
+.expense-item__memo {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.expense-item__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #edf0ee;
+}
+
+.item-action {
+  min-width: 68px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #ffffff;
+  color: #45504b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.item-action--delete {
+  color: #c0444d;
+  border-color: #f0cdd0;
+}
+
 .empty-message {
   margin: 8px 0 18px;
   padding: 22px 14px;
@@ -366,6 +407,127 @@ h1 {
 .daily-total strong {
   color: var(--line-green-dark);
   font-size: 1.3rem;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 48px;
+  padding: 0 17px;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-button {
+  border: 1px solid var(--line-green);
+  color: #ffffff;
+  background: var(--line-green);
+}
+
+.primary-button:hover,
+.primary-button:focus-visible {
+  background: var(--line-green-dark);
+  border-color: var(--line-green-dark);
+}
+
+.primary-button--full {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.secondary-button {
+  border: 1px solid #d9dfdc;
+  color: #4f5753;
+  background: #ffffff;
+}
+
+.modal__dialog--form {
+  max-height: 92vh;
+}
+
+.form-field {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 15px;
+}
+
+.form-field label {
+  color: #38413d;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.form-field label span {
+  margin-left: 5px;
+  color: #c0444d;
+  font-size: 0.68rem;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 12px;
+  border: 1px solid #d6ddda;
+  border-radius: 11px;
+  color: #202624;
+  background: #ffffff;
+  outline: none;
+}
+
+.form-field textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: var(--line-green);
+  box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.12);
+}
+
+.amount-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid #d6ddda;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.amount-input:focus-within {
+  border-color: var(--line-green);
+  box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.12);
+}
+
+.amount-input span {
+  padding-left: 13px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.amount-input input {
+  border: 0;
+  box-shadow: none !important;
+}
+
+.form-error {
+  min-height: 1.4em;
+  margin: -2px 0 12px;
+  color: #b33b44;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
+  position: sticky;
+  bottom: 0;
+  padding-top: 10px;
+  background: #ffffff;
 }
 
 body.modal-open {

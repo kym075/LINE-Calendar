@@ -29,7 +29,7 @@
     </main>
 
     <div id="expense-modal" class="modal" aria-hidden="true">
-      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__backdrop" data-close-modal="expense-modal"></div>
       <section
         class="modal__dialog"
         role="dialog"
@@ -41,7 +41,7 @@
             <p class="modal__eyebrow">支出明細</p>
             <h2 id="modal-title"></h2>
           </div>
-          <button class="modal__close" type="button" aria-label="閉じる" data-modal-close>
+          <button class="modal__close" type="button" aria-label="閉じる" data-close-modal="expense-modal">
             ×
           </button>
         </div>
@@ -52,6 +52,78 @@
           <span>この日の合計</span>
           <strong id="daily-total-amount">¥0</strong>
         </div>
+
+        <button id="add-from-detail" class="primary-button primary-button--full" type="button">
+          ＋ この日に支出を追加
+        </button>
+      </section>
+    </div>
+
+    <div id="expense-form-modal" class="modal" aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="expense-form-modal"></div>
+      <section
+        class="modal__dialog modal__dialog--form"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="form-modal-title"
+      >
+        <div class="modal__header">
+          <div>
+            <p class="modal__eyebrow">支出データ</p>
+            <h2 id="form-modal-title">支出を追加</h2>
+          </div>
+          <button class="modal__close" type="button" aria-label="閉じる" data-close-modal="expense-form-modal">
+            ×
+          </button>
+        </div>
+
+        <form id="expense-form" novalidate>
+          <input id="expense-id" type="hidden" />
+
+          <div class="form-field">
+            <label for="expense-date">日付 <span aria-hidden="true">必須</span></label>
+            <input id="expense-date" name="date" type="date" required />
+          </div>
+
+          <div class="form-field">
+            <label for="expense-title">店名・支出内容 <span aria-hidden="true">必須</span></label>
+            <input id="expense-title" name="title" type="text" maxlength="80" autocomplete="off" required />
+          </div>
+
+          <div class="form-field">
+            <label for="expense-category">カテゴリ <span aria-hidden="true">必須</span></label>
+            <select id="expense-category" name="category" required>
+              <option value="">選択してください</option>
+              <option value="食費">食費</option>
+              <option value="日用品">日用品</option>
+              <option value="交通費">交通費</option>
+              <option value="趣味">趣味</option>
+              <option value="衣服">衣服</option>
+              <option value="医療">医療</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label for="expense-amount">金額 <span aria-hidden="true">必須</span></label>
+            <div class="amount-input">
+              <span>¥</span>
+              <input id="expense-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" required />
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label for="expense-memo">メモ</label>
+            <textarea id="expense-memo" name="memo" rows="3" maxlength="300"></textarea>
+          </div>
+
+          <p id="form-error" class="form-error" role="alert" aria-live="polite"></p>
+
+          <div class="form-actions">
+            <button class="secondary-button" type="button" data-close-modal="expense-form-modal">キャンセル</button>
+            <button id="form-submit-button" class="primary-button" type="submit">登録する</button>
+          </div>
+        </form>
       </section>
     </div>
   </body>
