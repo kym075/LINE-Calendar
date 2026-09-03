@@ -1,23 +1,17 @@
-const STORAGE_KEY = "kakeiboExpenseRecords";
-
-// 初回起動時のみ保存する初期データ
-const initialExpenseRecords = [
-  { id: "initial-1", date: "2026-07-01", title: "コンビニ", category: "食費", amount: 850, memo: "" },
-  { id: "initial-2", date: "2026-07-01", title: "ドラッグストア", category: "日用品", amount: 1200, memo: "" },
-  { id: "initial-3", date: "2026-07-03", title: "昼食", category: "食費", amount: 750, memo: "" },
-  { id: "initial-4", date: "2026-07-03", title: "ガソリン", category: "交通費", amount: 3000, memo: "" },
-  { id: "initial-5", date: "2026-07-08", title: "書店", category: "趣味", amount: 1500, memo: "" },
-];
+const API_URL = "ここにGASのWebアプリURL";
 
 let expenseRecords = [];
 let calendar = null;
 let selectedDetailDate = "";
 let lastFocusedElement = null;
+let isFormSubmitting = false;
+const deletingExpenseIds = new Set();
 
 const expenseModal = document.getElementById("expense-modal");
 const formModal = document.getElementById("expense-form-modal");
 const modalTitle = document.getElementById("modal-title");
 const expenseList = document.getElementById("expense-list");
+const detailError = document.getElementById("detail-error");
 const dailyTotalAmount = document.getElementById("daily-total-amount");
 const calendarLoading = document.getElementById("calendar-loading");
 const expenseForm = document.getElementById("expense-form");
@@ -29,7 +23,6 @@ const expenseDateInput = document.getElementById("expense-date");
 const expenseTitleInput = document.getElementById("expense-title");
 const expenseCategoryInput = document.getElementById("expense-category");
 const expenseAmountInput = document.getElementById("expense-amount");
-const expenseMemoInput = document.getElementById("expense-memo");
 
 const numberFormatter = new Intl.NumberFormat("ja-JP");
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
@@ -39,86 +32,159 @@ const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
   weekday: "short",
 });
 
+class ApiRequestError extends Error {
+  constructor(kind, message, code = "") {
+    super(message);
+    this.name = "ApiRequestError";
+    this.kind = kind;
+    this.code = code;
+  }
+}
+
 function formatYen(amount) {
   return `¥${numberFormatter.format(Number(amount))}`;
 }
 
-function createUniqueId() {
-  if (window.crypto?.randomUUID) {
-    return window.crypto.randomUUID();
-  }
-  return `expense-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function isApiConfigured() {
+  return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL);
 }
 
-function isValidExpenseRecord(record) {
-  return Boolean(
+function normalizeExpenseRecord(record) {
+  const amount = Number(record?.amount);
+  const isValid =
     record &&
-      typeof record.id === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(record.date) &&
-      typeof record.title === "string" &&
-      typeof record.category === "string" &&
-      Number.isInteger(Number(record.amount)) &&
-      Number(record.amount) >= 1,
-  );
-}
+    typeof record.id === "string" &&
+    record.id.trim() !== "" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(record.date) &&
+    typeof record.title === "string" &&
+    typeof record.category === "string" &&
+    Number.isInteger(amount) &&
+    amount >= 1;
 
-// 将来はこの関数内をAPI取得へ置き換える
-function loadExpenseRecords() {
-  const storedJson = localStorage.getItem(STORAGE_KEY);
-
-  if (storedJson === null) {
-    const initialRecords = initialExpenseRecords.map((record) => ({ ...record }));
-    saveExpenseRecords(initialRecords);
-    return initialRecords;
+  if (!isValid) {
+    throw new ApiRequestError("json", "APIレスポンスの支出データ形式が正しくありません。");
   }
 
+  return {
+    id: record.id,
+    date: record.date,
+    title: record.title,
+    category: record.category,
+    amount,
+    createdAt: typeof record.createdAt === "string" ? record.createdAt : "",
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : "",
+  };
+}
+
+async function requestApi(action, payload = null) {
+  if (!isApiConfigured()) {
+    throw new ApiRequestError("config", "GASのWebアプリURLが設定されていません。");
+  }
+
+  const requestUrl = new URL(API_URL);
+  const options = {};
+
+  if (payload === null) {
+    requestUrl.searchParams.set("action", action);
+  } else {
+    options.method = "POST";
+    // 不要なカスタムヘッダーを付けず、プリフライトを避ける
+    options.body = JSON.stringify({ action, ...payload });
+  }
+
+  let response;
   try {
-    const storedRecords = JSON.parse(storedJson);
-    if (!Array.isArray(storedRecords)) {
-      throw new Error("保存データが配列ではありません。");
-    }
-
-    return storedRecords.filter(isValidExpenseRecord).map((record) => ({
-      id: record.id,
-      date: record.date,
-      title: record.title,
-      category: record.category,
-      amount: Number(record.amount),
-      memo: typeof record.memo === "string" ? record.memo : "",
-    }));
+    response = await fetch(requestUrl.toString(), options);
   } catch (error) {
-    console.error("保存済みの支出データを読み込めませんでした。", error);
-    return [];
+    throw new ApiRequestError("network", "GAS APIへ接続できませんでした。", "NETWORK_ERROR");
   }
+
+  let responseText;
+  try {
+    responseText = await response.text();
+  } catch (error) {
+    throw new ApiRequestError("network", "APIレスポンスを受信できませんでした。", "NETWORK_ERROR");
+  }
+
+  let responseBody;
+  try {
+    responseBody = JSON.parse(responseText);
+  } catch (error) {
+    throw new ApiRequestError("json", "APIレスポンスをJSONとして解析できませんでした。", "INVALID_JSON_RESPONSE");
+  }
+
+  if (!response.ok) {
+    throw new ApiRequestError("server", "サーバーからエラーが返されました。", String(response.status));
+  }
+
+  if (!responseBody || typeof responseBody.success !== "boolean") {
+    throw new ApiRequestError("json", "APIレスポンスの形式が正しくありません。", "INVALID_RESPONSE");
+  }
+
+  if (!responseBody.success) {
+    const code = String(responseBody.error?.code || "API_ERROR");
+    const message = String(responseBody.error?.message || "API処理に失敗しました。");
+    const serverCodes = ["INTERNAL_ERROR", "CONFIGURATION_ERROR", "SHEET_SCHEMA_ERROR", "LOCK_TIMEOUT"];
+    throw new ApiRequestError(serverCodes.includes(code) ? "server" : "api", message, code);
+  }
+
+  return responseBody.data;
 }
 
-function saveExpenseRecords(records = expenseRecords) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+function getUserErrorMessage(error) {
+  console.error(error);
+
+  if (!(error instanceof ApiRequestError)) {
+    return "処理に失敗しました。時間をおいて再試行してください。";
+  }
+
+  if (error.kind === "config") {
+    return "GASのWebアプリURLが未設定です。script.jsのAPI_URLを設定してください。";
+  }
+  if (error.kind === "network") {
+    return "通信できませんでした。ネットワーク接続とGASの公開設定を確認してください。";
+  }
+  if (error.kind === "json") {
+    return "サーバーの応答を読み取れませんでした。GASのデプロイ設定を確認してください。";
+  }
+  if (error.kind === "server") {
+    return "サーバー内部でエラーが発生しました。時間をおいて再試行してください。";
+  }
+
+  return error.message;
 }
 
-function addExpenseRecord(expenseData) {
-  const newRecord = { id: createUniqueId(), ...expenseData };
-  expenseRecords.push(newRecord);
-  saveExpenseRecords();
-  return newRecord;
+async function loadExpenseRecords() {
+  const records = await requestApi("list");
+  if (!Array.isArray(records)) {
+    throw new ApiRequestError("json", "支出一覧が配列ではありません。", "INVALID_RESPONSE");
+  }
+  return records.map(normalizeExpenseRecord);
 }
 
-function updateExpenseRecord(id, expenseData) {
+async function addExpenseRecord(expenseData) {
+  const createdRecord = normalizeExpenseRecord(
+    await requestApi("create", { expense: expenseData }),
+  );
+  expenseRecords.push(createdRecord);
+  return createdRecord;
+}
+
+async function updateExpenseRecord(id, expenseData) {
+  const updatedRecord = normalizeExpenseRecord(
+    await requestApi("update", { expense: { id, ...expenseData } }),
+  );
   const index = expenseRecords.findIndex((record) => record.id === id);
-  if (index === -1) return null;
-
-  expenseRecords[index] = { id, ...expenseData };
-  saveExpenseRecords();
-  return expenseRecords[index];
+  if (index !== -1) expenseRecords[index] = updatedRecord;
+  return updatedRecord;
 }
 
-function deleteExpenseRecord(id) {
-  const previousLength = expenseRecords.length;
+async function deleteExpenseRecord(id) {
+  const result = await requestApi("delete", { id });
+  if (!result || result.id !== id) {
+    throw new ApiRequestError("json", "削除結果の形式が正しくありません。", "INVALID_RESPONSE");
+  }
   expenseRecords = expenseRecords.filter((record) => record.id !== id);
-  if (expenseRecords.length === previousLength) return false;
-
-  saveExpenseRecords();
-  return true;
 }
 
 function getExpensesByDate(dateString) {
@@ -168,9 +234,7 @@ function closeModal(modalElement) {
     document.body.classList.remove("modal-open");
   }
 
-  if (lastFocusedElement instanceof HTMLElement) {
-    lastFocusedElement.focus();
-  }
+  if (lastFocusedElement instanceof HTMLElement) lastFocusedElement.focus();
 }
 
 function createActionButton(label, className, action, recordId) {
@@ -199,27 +263,20 @@ function createExpenseItem(record) {
   amount.className = "expense-item__amount";
   amount.textContent = formatYen(record.amount);
 
-  item.append(name, category, amount);
-
-  if (record.memo) {
-    const memo = document.createElement("p");
-    memo.className = "expense-item__memo";
-    memo.textContent = record.memo;
-    item.append(memo);
-  }
-
   const actions = document.createElement("div");
   actions.className = "expense-item__actions";
   actions.append(
     createActionButton("編集", "item-action", "edit", record.id),
     createActionButton("削除", "item-action item-action--delete", "delete", record.id),
   );
-  item.append(actions);
+
+  item.append(name, category, amount, actions);
   return item;
 }
 
 function renderExpenseDetails(dateString) {
   selectedDetailDate = dateString;
+  detailError.textContent = "";
   const records = getExpensesByDate(dateString);
   const localDate = new Date(`${dateString}T00:00:00`);
 
@@ -255,7 +312,6 @@ function openExpenseForm(dateString, record = null) {
     expenseTitleInput.value = record.title;
     expenseCategoryInput.value = record.category;
     expenseAmountInput.value = String(record.amount);
-    expenseMemoInput.value = record.memo;
   } else {
     formModalTitle.textContent = "支出を追加";
     formSubmitButton.textContent = "登録する";
@@ -269,51 +325,57 @@ function openExpenseForm(dateString, record = null) {
 
 function getValidatedFormData() {
   const amount = Number(expenseAmountInput.value);
-  const isWholeYen = Number.isInteger(amount) && amount >= 1;
+  const title = expenseTitleInput.value.trim();
+  const category = expenseCategoryInput.value.trim();
 
-  if (!expenseForm.checkValidity() || !isWholeYen) {
+  if (!expenseForm.checkValidity() || !title || !category || !Number.isInteger(amount) || amount < 1) {
     formError.textContent = "必須項目を入力し、金額は1円以上の整数にしてください。";
     expenseForm.reportValidity();
     return null;
   }
 
-  return {
-    date: expenseDateInput.value,
-    title: expenseTitleInput.value.trim(),
-    category: expenseCategoryInput.value,
-    amount,
-    memo: expenseMemoInput.value.trim(),
-  };
+  return { date: expenseDateInput.value, title, category, amount };
 }
 
-function handleFormSubmit(event) {
+function setFormSubmitting(isSubmitting) {
+  isFormSubmitting = isSubmitting;
+  formSubmitButton.disabled = isSubmitting;
+  formSubmitButton.textContent = isSubmitting
+    ? "保存中…"
+    : expenseIdInput.value
+      ? "更新する"
+      : "登録する";
+}
+
+async function handleFormSubmit(event) {
   event.preventDefault();
+  if (isFormSubmitting) return;
+
   const formData = getValidatedFormData();
-  if (!formData || !formData.title) {
-    if (!formData || !expenseTitleInput.value.trim()) {
-      formError.textContent = "必須項目を入力し、金額は1円以上の整数にしてください。";
-    }
-    return;
-  }
+  if (!formData) return;
 
   const editingId = expenseIdInput.value;
-  if (editingId) {
-    updateExpenseRecord(editingId, formData);
-  } else {
-    addExpenseRecord(formData);
-  }
+  formError.textContent = "";
+  setFormSubmitting(true);
 
-  refreshCalendarEvents();
-  closeModal(formModal);
+  try {
+    if (editingId) {
+      await updateExpenseRecord(editingId, formData);
+    } else {
+      await addExpenseRecord(formData);
+    }
 
-  if (expenseModal.classList.contains("is-open")) {
-    renderExpenseDetails(selectedDetailDate);
-  } else {
-    openExpenseModal(formData.date);
+    refreshCalendarEvents();
+    closeModal(formModal);
+    renderExpenseDetails(selectedDetailDate || formData.date);
+  } catch (error) {
+    formError.textContent = getUserErrorMessage(error);
+  } finally {
+    setFormSubmitting(false);
   }
 }
 
-function handleExpenseListClick(event) {
+async function handleExpenseListClick(event) {
   const actionButton = event.target.closest("button[data-action]");
   if (!actionButton) return;
 
@@ -325,13 +387,24 @@ function handleExpenseListClick(event) {
     return;
   }
 
-  if (actionButton.dataset.action === "delete") {
-    const confirmed = window.confirm(`「${record.title}」を削除しますか？`);
-    if (!confirmed) return;
+  if (actionButton.dataset.action !== "delete" || deletingExpenseIds.has(record.id)) return;
+  if (!window.confirm(`「${record.title}」を削除しますか？`)) return;
 
-    deleteExpenseRecord(record.id);
+  deletingExpenseIds.add(record.id);
+  detailError.textContent = "";
+  actionButton.disabled = true;
+  actionButton.textContent = "削除中…";
+
+  try {
+    await deleteExpenseRecord(record.id);
     refreshCalendarEvents();
     renderExpenseDetails(selectedDetailDate);
+  } catch (error) {
+    detailError.textContent = getUserErrorMessage(error);
+    actionButton.disabled = false;
+    actionButton.textContent = "削除";
+  } finally {
+    deletingExpenseIds.delete(record.id);
   }
 }
 
@@ -340,10 +413,9 @@ function hideCalendarLoading() {
   calendarLoading.setAttribute("aria-hidden", "true");
 }
 
-function showCalendarLoadingError() {
+function showCalendarLoadingError(message) {
   calendarLoading.classList.add("has-error");
-  calendarLoading.querySelector(".loading-message").textContent =
-    "カレンダーを読み込めませんでした。ファイル一式を同じフォルダに保存して再読み込みしてください。";
+  calendarLoading.querySelector(".loading-message").textContent = message;
 }
 
 function loadLocalScript(source) {
@@ -360,42 +432,29 @@ function hasJapaneseCalendarLocale() {
   return window.FullCalendar?.globalLocales?.some((locale) => locale.code === "ja");
 }
 
-// CDNを利用できないローカル表示環境では同梱ファイルへ切り替える
+// CDNを利用できない環境では同梱ファイルへ切り替える
 async function ensureFullCalendarLoaded() {
-  if (!window.FullCalendar) {
-    await loadLocalScript("vendor/fullcalendar-6.1.19.min.js");
-  }
-
-  if (!hasJapaneseCalendarLocale()) {
-    await loadLocalScript("vendor/fullcalendar-ja-6.1.19.min.js");
-  }
-
+  if (!window.FullCalendar) await loadLocalScript("vendor/fullcalendar-6.1.19.min.js");
+  if (!hasJapaneseCalendarLocale()) await loadLocalScript("vendor/fullcalendar-ja-6.1.19.min.js");
   return Boolean(window.FullCalendar);
 }
 
 async function initializeCalendar() {
-
   try {
-    const isCalendarReady = await ensureFullCalendarLoaded();
-    if (!isCalendarReady) {
+    if (!(await ensureFullCalendarLoaded())) {
       throw new Error("FullCalendarを読み込めませんでした。");
     }
 
-    expenseRecords = loadExpenseRecords();
+    expenseRecords = await loadExpenseRecords();
     calendar = new FullCalendar.Calendar(document.getElementById("calendar"), {
       locale: "ja",
       initialView: "dayGridMonth",
-      initialDate: "2026-07-01",
       firstDay: 0,
       fixedWeekCount: false,
       showNonCurrentDates: true,
       dayMaxEvents: 1,
       height: "auto",
-      headerToolbar: {
-        left: "prev",
-        center: "title",
-        right: "today next",
-      },
+      headerToolbar: { left: "prev", center: "title", right: "today next" },
       buttonText: { today: "今日" },
       events: createCalendarEvents(expenseRecords),
       eventContent(eventInfo) {
@@ -416,15 +475,17 @@ async function initializeCalendar() {
     calendar.render();
     requestAnimationFrame(hideCalendarLoading);
   } catch (error) {
-    console.error("カレンダーの初期化に失敗しました。", error);
-    showCalendarLoadingError();
+    const message = error instanceof ApiRequestError
+      ? getUserErrorMessage(error)
+      : "カレンダーを読み込めませんでした。ファイル一式を確認してください。";
+    if (!(error instanceof ApiRequestError)) console.error(error);
+    showCalendarLoadingError(message);
   }
 }
 
 document.addEventListener("click", (event) => {
   const closeButton = event.target.closest("[data-close-modal]");
   if (!closeButton) return;
-
   const modalElement = document.getElementById(closeButton.dataset.closeModal);
   if (modalElement) closeModal(modalElement);
 });

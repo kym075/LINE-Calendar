@@ -26,8 +26,7 @@ button {
 }
 
 input,
-select,
-textarea {
+select {
   font: inherit;
 }
 
@@ -345,15 +344,6 @@ h1 {
   white-space: nowrap;
 }
 
-.expense-item__memo {
-  grid-column: 1 / -1;
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: 0.78rem;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
 .expense-item__actions {
   grid-column: 1 / -1;
   display: flex;
@@ -378,6 +368,15 @@ h1 {
 .item-action--delete {
   color: #c0444d;
   border-color: #f0cdd0;
+}
+
+.operation-error {
+  min-height: 1.4em;
+  margin: 12px 0 0;
+  color: #b33b44;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.55;
 }
 
 .empty-message {
@@ -416,6 +415,13 @@ h1 {
   border-radius: 12px;
   font-weight: 800;
   cursor: pointer;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.item-action:disabled {
+  cursor: wait;
+  opacity: 0.58;
 }
 
 .primary-button {
@@ -464,8 +470,7 @@ h1 {
 }
 
 .form-field input,
-.form-field select,
-.form-field textarea {
+.form-field select {
   width: 100%;
   min-height: 48px;
   padding: 11px 12px;
@@ -476,14 +481,8 @@ h1 {
   outline: none;
 }
 
-.form-field textarea {
-  min-height: 86px;
-  resize: vertical;
-}
-
 .form-field input:focus,
-.form-field select:focus,
-.form-field textarea:focus {
+.form-field select:focus {
   border-color: var(--line-green);
   box-shadow: 0 0 0 3px rgba(6, 199, 85, 0.12);
 }

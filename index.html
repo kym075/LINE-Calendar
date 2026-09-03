@@ -22,7 +22,7 @@
       <section class="calendar-card" aria-label="月間支出カレンダー">
         <div id="calendar-loading" class="calendar-loading" role="status" aria-live="polite">
           <span class="loading-spinner" aria-hidden="true"></span>
-          <p class="loading-message">カレンダーを読み込んでいます</p>
+          <p class="loading-message">支出データを読み込んでいます</p>
         </div>
         <div id="calendar"></div>
       </section>
@@ -47,6 +47,7 @@
         </div>
 
         <div id="expense-list" class="expense-list"></div>
+        <p id="detail-error" class="operation-error" role="alert" aria-live="polite"></p>
 
         <div class="daily-total">
           <span>この日の合計</span>
@@ -110,11 +111,6 @@
               <span>¥</span>
               <input id="expense-amount" name="amount" type="number" min="1" step="1" inputmode="numeric" required />
             </div>
-          </div>
-
-          <div class="form-field">
-            <label for="expense-memo">メモ</label>
-            <textarea id="expense-memo" name="memo" rows="3" maxlength="300"></textarea>
           </div>
 
           <p id="form-error" class="form-error" role="alert" aria-live="polite"></p>
