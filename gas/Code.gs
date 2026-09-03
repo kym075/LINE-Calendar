@@ -1,4 +1,4 @@
-const SPREADSHEET_ID = "ここにスプレッドシートID";
+const SPREADSHEET_ID_PROPERTY = "SPREADSHEET_ID";
 const SHEET_NAME = "expenses";
 const EXPENSE_HEADERS = ["id", "date", "title", "category", "amount", "createdAt", "updatedAt"];
 const WRITE_LOCK_TIMEOUT_MS = 10000;
@@ -49,12 +49,13 @@ function setupExpensesSheet() {
 }
 
 function getSpreadsheet() {
-  if (!SPREADSHEET_ID || SPREADSHEET_ID === "ここにスプレッドシートID") {
+  const spreadsheetId = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_PROPERTY);
+  if (!spreadsheetId) {
     throw new ApiError("CONFIGURATION_ERROR", "スプレッドシートの設定を確認してください");
   }
 
   try {
-    return SpreadsheetApp.openById(SPREADSHEET_ID);
+    return SpreadsheetApp.openById(spreadsheetId);
   } catch (error) {
     throw new ApiError("CONFIGURATION_ERROR", "スプレッドシートの設定を確認してください");
   }

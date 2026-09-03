@@ -1,4 +1,4 @@
-const API_URL = "ここにGASのWebアプリURL";
+const API_URL = window.APP_CONFIG?.API_URL || "";
 
 let expenseRecords = [];
 let calendar = null;
@@ -139,7 +139,7 @@ function getUserErrorMessage(error) {
   }
 
   if (error.kind === "config") {
-    return "GASのWebアプリURLが未設定です。script.jsのAPI_URLを設定してください。";
+    return "GASのWebアプリURLが未設定です。config.jsを設定してください。";
   }
   if (error.kind === "network") {
     return "通信できませんでした。ネットワーク接続とGASの公開設定を確認してください。";

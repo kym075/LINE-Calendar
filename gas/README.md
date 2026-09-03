@@ -30,12 +30,16 @@ https://docs.google.com/spreadsheets/d/スプレッドシートID/edit
 1. スプレッドシート上部の「拡張機能」から「Apps Script」を開きます。
 2. エディタに最初からあるコードを削除します。
 3. このフォルダの`Code.gs`をすべて貼り付けます。
-4. 冒頭の`SPREADSHEET_ID`を、手順2で確認したIDへ変更します。
-5. プロジェクトを保存します。
+4. Apps Script左側の「プロジェクトの設定」を開きます。
+5. 「スクリプト プロパティ」に次の値を追加します。
+6. プロジェクトを保存します。
 
-```javascript
-const SPREADSHEET_ID = "取得したスプレッドシートID";
+```text
+プロパティ: SPREADSHEET_ID
+値: 手順2で確認したスプレッドシートID
 ```
+
+スプレッドシートIDはソースコードへ直接書かないため、GitHubへ誤って公開されません。
 
 ## 4. 初回実行と権限承認
 
@@ -61,13 +65,15 @@ const SPREADSHEET_ID = "取得したスプレッドシートID";
 
 ## 6. フロントエンドへURLを設定する
 
-`script.js`冒頭の`API_URL`を、コピーしたウェブアプリURLへ変更します。
+`config.example.js`をコピーして`config.js`を作成し、コピーしたウェブアプリURLを設定します。
 
 ```javascript
-const API_URL = "https://script.google.com/macros/s/デプロイID/exec";
+window.APP_CONFIG = {
+  API_URL: "https://script.google.com/macros/s/デプロイID/exec",
+};
 ```
 
-URLを設定するまでは、家計簿画面に未設定エラーが表示されます。既存のlocalStorageデータは削除されませんが、画面からは使用されません。
+`config.js`は`.gitignore`の対象なのでGitHubへアップロードされません。URLを設定するまでは、家計簿画面に未設定エラーが表示されます。既存のlocalStorageデータは削除されませんが、画面からは使用されません。
 
 ## 7. コード変更後の再デプロイ
 
