@@ -1,2 +1,5 @@
 # ローカル環境固有の接続先
 config.js
+.dev.vars
+.wrangler/
+test-assets/

@@ -17,6 +17,11 @@
 | `LINE_CHANNEL_ID` | LINEログインチャネルのチャネルID |
 | `HOUSEHOLD_ID` | 二人共通の内部ID。例：`our-home` |
 | `HOUSEHOLD_JOIN_CODE` | 二人だけが知る十分に長い共有コード |
+| `LINE_MESSAGING_CHANNEL_ACCESS_TOKEN` | Messaging APIチャネルの長期チャネルアクセストークン |
+| `LINE_WEBHOOK_SHARED_SECRET` | Webhook中継Workerと共有する32文字以上のランダム文字列 |
+| `GEMINI_API_KEY` | Google AI Studioで発行したGemini APIキー |
+| `GEMINI_MODEL` | レシート解析モデル。例：`gemini-2.5-flash` |
+| `GEMINI_FALLBACK_MODEL` | 任意。混雑時の予備モデル。未設定時は`gemini-2.5-flash` |
 
 共有コードには、推測されにくい12文字以上の英数字などを使用してください。これらの値はGitHubへコミットしません。
 
@@ -26,6 +31,8 @@ Apps Script上部の関数一覧から`setupApplication`を選択して実行し
 
 - `expenses`シート：支出データ
 - `members`シート：参加したLINEユーザー
+- `lineGroups`シート：共有家計簿へ連携したLINEグループ
+- `receiptJobs`シート：レシート画像の処理状態と二重登録防止情報
 
 新しい`expenses`ヘッダー：
 
@@ -37,6 +44,18 @@ id | householdId | userId | userName | date | title | category | amount | create
 
 ```text
 userId | householdId | displayName | joinedAt
+```
+
+`lineGroups`ヘッダー：
+
+```text
+groupId | householdId | linkedBy | linkedAt
+```
+
+`receiptJobs`ヘッダー：
+
+```text
+messageId | householdId | userId | status | expenseId | errorCode | createdAt | updatedAt | errorDetail
 ```
 
 旧7列形式の`expenses`シートがある場合、`setupApplication`が新形式へ移行します。既存データの登録者は「移行データ」と表示されます。念のため実行前にスプレッドシートをコピーしておくことを推奨します。
@@ -128,3 +147,11 @@ window.APP_CONFIG = {
 - `delete`：同じ家計簿内の支出削除
 
 IDトークンは保存・ログ出力せず、リクエストごとにLINEの検証APIで確認します。
+
+## LINE Webhookの受信
+
+GAS WebアプリではLINE署名が入るHTTPヘッダーを取得できないため、LINE WebhookをGASへ直接接続しません。`worker/worker.js`のCloudflare Workerで署名を検証し、検証済みのリクエストだけをGASへ転送します。
+
+設定と確認手順は`worker/README.md`を参照してください。`家計簿テスト`でWebhookを確認した後、既存メンバーがグループ内で`家計簿連携`と送ると、そのグループが共有家計簿へ紐付きます。連携済みグループでは、共有家計簿のメンバーが送った画像だけを受け付けます。
+
+画像はLINEから一時的に取得してGemini APIで解析し、店名・日付・カテゴリ・合計金額がすべて妥当な場合だけ`expenses`へ自動登録します。503では同じモデルを一度再試行し、それでも混雑中の場合は予備モデルへ切り替えます。画像本体やGeminiの生の応答は保存しません。LINEから同じWebhookが再送されても、`receiptJobs`の`messageId`によって二重登録を防ぎます。通常の会話には返信しません。
