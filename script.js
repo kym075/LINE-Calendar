@@ -1,10 +1,13 @@
 const API_URL = window.APP_CONFIG?.API_URL || "";
+const LIFF_ID = window.APP_CONFIG?.LIFF_ID || "";
 
 let expenseRecords = [];
 let calendar = null;
 let selectedDetailDate = "";
 let lastFocusedElement = null;
 let isFormSubmitting = false;
+let isJoinSubmitting = false;
+let currentSession = null;
 const deletingExpenseIds = new Set();
 
 const expenseModal = document.getElementById("expense-modal");
@@ -23,6 +26,12 @@ const expenseDateInput = document.getElementById("expense-date");
 const expenseTitleInput = document.getElementById("expense-title");
 const expenseCategoryInput = document.getElementById("expense-category");
 const expenseAmountInput = document.getElementById("expense-amount");
+const currentUser = document.getElementById("current-user");
+const joinModal = document.getElementById("join-modal");
+const joinForm = document.getElementById("join-form");
+const joinCodeInput = document.getElementById("join-code");
+const joinError = document.getElementById("join-error");
+const joinSubmitButton = document.getElementById("join-submit-button");
 
 const numberFormatter = new Intl.NumberFormat("ja-JP");
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", {
@@ -49,6 +58,10 @@ function isApiConfigured() {
   return /^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(API_URL);
 }
 
+function isLiffConfigured() {
+  return /^\d+-[A-Za-z0-9]+$/.test(LIFF_ID);
+}
+
 function normalizeExpenseRecord(record) {
   const amount = Number(record?.amount);
   const isValid =
@@ -67,6 +80,9 @@ function normalizeExpenseRecord(record) {
 
   return {
     id: record.id,
+    householdId: typeof record.householdId === "string" ? record.householdId : "",
+    userId: typeof record.userId === "string" ? record.userId : "",
+    userName: typeof record.userName === "string" ? record.userName : "",
     date: record.date,
     title: record.title,
     category: record.category,
@@ -76,25 +92,25 @@ function normalizeExpenseRecord(record) {
   };
 }
 
-async function requestApi(action, payload = null) {
+async function requestApi(action, payload = {}) {
   if (!isApiConfigured()) {
     throw new ApiRequestError("config", "GASのWebアプリURLが設定されていません。");
   }
 
-  const requestUrl = new URL(API_URL);
-  const options = {};
-
-  if (payload === null) {
-    requestUrl.searchParams.set("action", action);
-  } else {
-    options.method = "POST";
-    // 不要なカスタムヘッダーを付けず、プリフライトを避ける
-    options.body = JSON.stringify({ action, ...payload });
+  const idToken = window.liff?.getIDToken();
+  if (!idToken) {
+    throw new ApiRequestError("auth", "LINEの認証情報を取得できませんでした。", "AUTH_REQUIRED");
   }
+
+  // 不要なカスタムヘッダーを付けず、プリフライトを避ける
+  const options = {
+    method: "POST",
+    body: JSON.stringify({ action, idToken, ...payload }),
+  };
 
   let response;
   try {
-    response = await fetch(requestUrl.toString(), options);
+    response = await fetch(API_URL, options);
   } catch (error) {
     throw new ApiRequestError("network", "GAS APIへ接続できませんでした。", "NETWORK_ERROR");
   }
@@ -125,7 +141,9 @@ async function requestApi(action, payload = null) {
     const code = String(responseBody.error?.code || "API_ERROR");
     const message = String(responseBody.error?.message || "API処理に失敗しました。");
     const serverCodes = ["INTERNAL_ERROR", "CONFIGURATION_ERROR", "SHEET_SCHEMA_ERROR", "LOCK_TIMEOUT"];
-    throw new ApiRequestError(serverCodes.includes(code) ? "server" : "api", message, code);
+    const authCodes = ["AUTH_REQUIRED", "AUTH_ERROR", "TOKEN_EXPIRED"];
+    const kind = serverCodes.includes(code) ? "server" : authCodes.includes(code) ? "auth" : "api";
+    throw new ApiRequestError(kind, message, code);
   }
 
   return responseBody.data;
@@ -139,7 +157,7 @@ function getUserErrorMessage(error) {
   }
 
   if (error.kind === "config") {
-    return "GASのWebアプリURLが未設定です。config.jsを設定してください。";
+    return error.message || "config.jsの接続設定を確認してください。";
   }
   if (error.kind === "network") {
     return "通信できませんでした。ネットワーク接続とGASの公開設定を確認してください。";
@@ -149,6 +167,9 @@ function getUserErrorMessage(error) {
   }
   if (error.kind === "server") {
     return "サーバー内部でエラーが発生しました。時間をおいて再試行してください。";
+  }
+  if (error.kind === "auth") {
+    return "LINE認証を確認できませんでした。LINEから開き直してください。";
   }
 
   return error.message;
@@ -160,6 +181,22 @@ async function loadExpenseRecords() {
     throw new ApiRequestError("json", "支出一覧が配列ではありません。", "INVALID_RESPONSE");
   }
   return records.map(normalizeExpenseRecord);
+}
+
+async function loadSession() {
+  const session = await requestApi("session");
+  if (!session || typeof session.joined !== "boolean") {
+    throw new ApiRequestError("json", "ログイン情報の形式が正しくありません。", "INVALID_RESPONSE");
+  }
+  return session;
+}
+
+async function joinHousehold(joinCode) {
+  const session = await requestApi("join", { joinCode });
+  if (!session || session.joined !== true) {
+    throw new ApiRequestError("json", "参加結果の形式が正しくありません。", "INVALID_RESPONSE");
+  }
+  return session;
 }
 
 async function addExpenseRecord(expenseData) {
@@ -258,6 +295,10 @@ function createExpenseItem(record) {
   const category = document.createElement("span");
   category.className = "expense-item__category";
   category.textContent = record.category;
+
+  if (record.userName) {
+    category.textContent = `${record.category}・${record.userName}`;
+  }
 
   const amount = document.createElement("span");
   amount.className = "expense-item__amount";
@@ -418,6 +459,56 @@ function showCalendarLoadingError(message) {
   calendarLoading.querySelector(".loading-message").textContent = message;
 }
 
+function setCalendarLoadingMessage(message) {
+  calendarLoading.classList.remove("has-error", "is-hidden");
+  calendarLoading.setAttribute("aria-hidden", "false");
+  calendarLoading.querySelector(".loading-message").textContent = message;
+}
+
+function renderCurrentSession(session) {
+  const displayName = session?.user?.displayName;
+  if (!displayName) {
+    currentUser.hidden = true;
+    return;
+  }
+  currentUser.textContent = `${displayName}さんでログイン中`;
+  currentUser.hidden = false;
+}
+
+function openJoinModal(session) {
+  renderCurrentSession(session);
+  joinError.textContent = "";
+  joinForm.reset();
+  joinModal.classList.add("is-open");
+  joinModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  joinCodeInput.focus();
+}
+
+async function initializeLiff() {
+  if (!isLiffConfigured()) {
+    throw new ApiRequestError("config", "LIFF IDが設定されていません。");
+  }
+  if (!window.liff) {
+    throw new ApiRequestError("network", "LIFF SDKを読み込めませんでした。", "LIFF_SDK_ERROR");
+  }
+
+  try {
+    await window.liff.init({ liffId: LIFF_ID });
+  } catch (error) {
+    throw new ApiRequestError("auth", "LIFFの初期化に失敗しました。", "LIFF_INIT_ERROR");
+  }
+  if (!window.liff.isLoggedIn()) {
+    setCalendarLoadingMessage("LINEログインへ移動しています");
+    window.liff.login({ redirectUri: window.location.href });
+    return false;
+  }
+  if (!window.liff.getIDToken()) {
+    throw new ApiRequestError("auth", "IDトークンを取得できませんでした。", "AUTH_REQUIRED");
+  }
+  return true;
+}
+
 function loadLocalScript(source) {
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
@@ -439,13 +530,8 @@ async function ensureFullCalendarLoaded() {
   return Boolean(window.FullCalendar);
 }
 
-async function initializeCalendar() {
-  try {
-    if (!(await ensureFullCalendarLoaded())) {
-      throw new Error("FullCalendarを読み込めませんでした。");
-    }
-
-    expenseRecords = await loadExpenseRecords();
+function renderCalendar() {
+  if (!calendar) {
     calendar = new FullCalendar.Calendar(document.getElementById("calendar"), {
       locale: "ja",
       initialView: "dayGridMonth",
@@ -471,13 +557,67 @@ async function initializeCalendar() {
         openExpenseModal(eventInfo.event.extendedProps.date);
       },
     });
-
     calendar.render();
-    requestAnimationFrame(hideCalendarLoading);
+  } else {
+    refreshCalendarEvents();
+  }
+}
+
+async function loadAndRenderCalendar() {
+  setCalendarLoadingMessage("支出データを読み込んでいます");
+  expenseRecords = await loadExpenseRecords();
+  renderCalendar();
+  requestAnimationFrame(hideCalendarLoading);
+}
+
+async function handleJoinSubmit(event) {
+  event.preventDefault();
+  if (isJoinSubmitting) return;
+
+  const joinCode = joinCodeInput.value.trim();
+  if (!joinCode) {
+    joinError.textContent = "共有コードを入力してください。";
+    return;
+  }
+
+  isJoinSubmitting = true;
+  joinSubmitButton.disabled = true;
+  joinSubmitButton.textContent = "参加中…";
+  joinError.textContent = "";
+
+  try {
+    currentSession = await joinHousehold(joinCode);
+    renderCurrentSession(currentSession);
+    closeModal(joinModal);
+    await loadAndRenderCalendar();
+  } catch (error) {
+    joinError.textContent = getUserErrorMessage(error);
+  } finally {
+    isJoinSubmitting = false;
+    joinSubmitButton.disabled = false;
+    joinSubmitButton.textContent = "参加する";
+  }
+}
+
+async function initializeApp() {
+  try {
+    setCalendarLoadingMessage("LINEへ接続しています");
+    if (!(await ensureFullCalendarLoaded())) throw new Error("FullCalendarを読み込めませんでした。");
+    if (!(await initializeLiff())) return;
+
+    currentSession = await loadSession();
+    renderCurrentSession(currentSession);
+    if (!currentSession.joined) {
+      setCalendarLoadingMessage("共有家計簿への参加を確認しています");
+      openJoinModal(currentSession);
+      return;
+    }
+
+    await loadAndRenderCalendar();
   } catch (error) {
     const message = error instanceof ApiRequestError
       ? getUserErrorMessage(error)
-      : "カレンダーを読み込めませんでした。ファイル一式を確認してください。";
+      : "アプリを読み込めませんでした。設定を確認してください。";
     if (!(error instanceof ApiRequestError)) console.error(error);
     showCalendarLoadingError(message);
   }
@@ -495,6 +635,7 @@ document.getElementById("add-from-detail").addEventListener("click", () =>
 );
 expenseForm.addEventListener("submit", handleFormSubmit);
 expenseList.addEventListener("click", handleExpenseListClick);
+joinForm.addEventListener("submit", handleJoinSubmit);
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
@@ -502,4 +643,4 @@ document.addEventListener("keydown", (event) => {
   else if (expenseModal.classList.contains("is-open")) closeModal(expenseModal);
 });
 
-document.addEventListener("DOMContentLoaded", initializeCalendar);
+document.addEventListener("DOMContentLoaded", initializeApp);

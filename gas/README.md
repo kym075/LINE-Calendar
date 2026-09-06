@@ -1,108 +1,130 @@
-# Google Apps Script・スプレッドシート設定手順
+# LIFF共有家計簿の設定手順
 
-このフォルダの`Code.gs`をGoogle Apps Scriptへ登録すると、家計簿画面からGoogleスプレッドシートの支出データを取得・追加・編集・削除できます。
+この構成では、LIFFが取得した生のIDトークンをGASへ送り、GASがLINEの検証APIで本人確認します。クライアントから送られたユーザーIDや表示名は認証には使用しません。
 
-## 1. Googleスプレッドシートを作成する
+二人は初回に同じ共有コードを入力し、同じ`householdId`へ参加します。参加後は二人で同じ支出を閲覧・追加・編集・削除できます。
 
-1. Googleドライブで新しいGoogleスプレッドシートを作成します。
-2. ファイル名は任意です。
-3. シート名を`expenses`に変更します。シートが存在しない場合は、初回セットアップ時に自動作成されます。
-4. 1行目には次のヘッダーを左から順番に設定します。空のシートならコードが自動作成します。
+## 1. GoogleスプレッドシートとGASを準備する
 
-```text
-id | date | title | category | amount | createdAt | updatedAt
-```
+1. Googleスプレッドシートを作成します。
+2. 「拡張機能」→「Apps Script」を開きます。
+3. このフォルダの`Code.gs`を貼り付けて保存します。
+4. Apps Script左側の「プロジェクトの設定」→「スクリプト プロパティ」に次の4件を設定します。
 
-既存の1行目が上記と異なる場合、誤った列への書き込みを防ぐためAPIはエラーを返します。
+| プロパティ | 設定値 |
+| --- | --- |
+| `SPREADSHEET_ID` | スプレッドシートURLの`/d/`と`/edit`の間の文字列 |
+| `LINE_CHANNEL_ID` | LINEログインチャネルのチャネルID |
+| `HOUSEHOLD_ID` | 二人共通の内部ID。例：`our-home` |
+| `HOUSEHOLD_JOIN_CODE` | 二人だけが知る十分に長い共有コード |
 
-## 2. スプレッドシートIDを確認する
+共有コードには、推測されにくい12文字以上の英数字などを使用してください。これらの値はGitHubへコミットしません。
 
-スプレッドシートのURLは次の形式です。
+## 2. シートを作成・移行する
 
-```text
-https://docs.google.com/spreadsheets/d/スプレッドシートID/edit
-```
+Apps Script上部の関数一覧から`setupApplication`を選択して実行し、権限を承認します。
 
-`/d/`と`/edit`の間にある文字列がスプレッドシートIDです。
+- `expenses`シート：支出データ
+- `members`シート：参加したLINEユーザー
 
-## 3. Apps ScriptへCode.gsを登録する
-
-1. スプレッドシート上部の「拡張機能」から「Apps Script」を開きます。
-2. エディタに最初からあるコードを削除します。
-3. このフォルダの`Code.gs`をすべて貼り付けます。
-4. Apps Script左側の「プロジェクトの設定」を開きます。
-5. 「スクリプト プロパティ」に次の値を追加します。
-6. プロジェクトを保存します。
+新しい`expenses`ヘッダー：
 
 ```text
-プロパティ: SPREADSHEET_ID
-値: 手順2で確認したスプレッドシートID
+id | householdId | userId | userName | date | title | category | amount | createdAt | updatedAt
 ```
 
-スプレッドシートIDはソースコードへ直接書かないため、GitHubへ誤って公開されません。
+`members`ヘッダー：
 
-## 4. 初回実行と権限承認
+```text
+userId | householdId | displayName | joinedAt
+```
 
-1. Apps Script上部の関数一覧から`setupExpensesSheet`を選びます。
-2. 「実行」を押します。
-3. 権限確認が表示されたら、スプレッドシートを操作するGoogleアカウントを選択して承認します。
-4. `expenses`シートとヘッダー行が用意されたことを確認します。
+旧7列形式の`expenses`シートがある場合、`setupApplication`が新形式へ移行します。既存データの登録者は「移行データ」と表示されます。念のため実行前にスプレッドシートをコピーしておくことを推奨します。
 
-「このアプリはGoogleで確認されていません」と表示される開発用プロジェクトでは、内容を確認したうえで「詳細」から自分のプロジェクトへ進みます。
+## 3. GASをWebアプリとして再デプロイする
 
-## 5. Webアプリとしてデプロイする
+1. 「デプロイ」→「デプロイを管理」を開きます。
+2. 既存デプロイを編集します。
+3. バージョンで「新バージョン」を選びます。
+4. 「次のユーザーとして実行」は「自分」にします。
+5. 「アクセスできるユーザー」は「全員」にします。
+6. デプロイし、`/exec`で終わるURLを控えます。
 
-1. Apps Script右上の「デプロイ」から「新しいデプロイ」を選びます。
-2. 種類は「ウェブアプリ」を選びます。
-3. 「次のユーザーとして実行」は「自分」にします。
-4. 開発中の「アクセスできるユーザー」は「全員」にします。
-5. 「デプロイ」を押し、追加の権限確認があれば承認します。
-6. 表示された`/exec`で終わるウェブアプリURLをコピーします。
+GETでURLを開くと、次が表示されればGASは稼働しています。
 
-「全員」が選べないGoogle Workspace環境では、管理者ポリシーの確認が必要です。ログイン必須の公開設定では、ブラウザからのAPI通信がログイン画面へ転送され、JSON解析エラーになる場合があります。
+```json
+{"success":true,"data":{"status":"ok"}}
+```
 
-> このAPIにはまだLIFF認証などの利用者認証がありません。「全員」で公開するとURLを知る人が操作できるため、開発・検証用途に限定してください。
+支出APIはすべてPOSTで、生のLINE IDトークンが必要です。URLを知っているだけでは支出を操作できません。
 
-## 6. フロントエンドへURLを設定する
+## 4. LINE DevelopersでLIFFアプリを作成する
 
-`config.example.js`をコピーして`config.js`を作成し、コピーしたウェブアプリURLを設定します。
+1. LINE Developersコンソールでプロバイダーを作成または選択します。
+2. LINEログインチャネルを作成します。
+3. LIFFアプリを追加します。
+4. サイズは`Full`を選びます。
+5. Endpoint URLには、後述するGitHub PagesのHTTPS URLを設定します。
+6. Scopeは少なくとも`openid`と`profile`を有効にします。
+7. 発行されたLIFF IDを控えます。
+
+LIFF IDとLINEログインチャネルIDは別の値です。GASの`LINE_CHANNEL_ID`にはチャネルID、フロントの設定にはLIFF IDを使用します。
+
+## 5. GitHub Secretsを設定する
+
+GitHubリポジトリの「Settings」→「Secrets and variables」→「Actions」で、次のRepository secretsを作成します。
+
+| Secret名 | 設定値 |
+| --- | --- |
+| `GAS_API_URL` | GASの`/exec`で終わるURL |
+| `LIFF_ID` | LINE Developersで発行されたLIFF ID |
+
+実際の値はソースコードへ書かれません。GitHub Actionsが公開時に`config.js`を生成します。
+
+## 6. GitHub Pagesを有効にする
+
+1. GitHubの「Settings」→「Pages」を開きます。
+2. Sourceで「GitHub Actions」を選択します。
+3. `main`へ変更を反映するか、Actions画面から`Deploy to GitHub Pages`を実行します。
+4. デプロイ完了後に表示されるHTTPS URLを確認します。
+5. そのURLをLINE DevelopersのLIFF Endpoint URLへ設定します。
+
+Endpoint URLを変更した後は、LIFF URLからアプリを開いてください。`file://`や通常のローカルHTTP URLはLIFFの本番確認には使用できません。
+
+## 7. ローカル設定
+
+ローカル確認用の`config.js`はGit管理対象外です。`config.example.js`を参考に設定します。
 
 ```javascript
 window.APP_CONFIG = {
   API_URL: "https://script.google.com/macros/s/デプロイID/exec",
+  LIFF_ID: "発行されたLIFF ID",
 };
 ```
 
-`config.js`は`.gitignore`の対象なのでGitHubへアップロードされません。URLを設定するまでは、家計簿画面に未設定エラーが表示されます。既存のlocalStorageデータは削除されませんが、画面からは使用されません。
+ただしLINEログインのリダイレクト先はLIFF Endpoint URLと一致する必要があるため、最終確認はGitHub Pages上で行います。
 
-## 7. コード変更後の再デプロイ
+## 8. 二人で参加して確認する
 
-`Code.gs`を変更して保存しただけでは、公開中のWebアプリへ反映されません。
-
-1. 「デプロイ」から「デプロイを管理」を開きます。
-2. 対象デプロイの編集を選びます。
-3. バージョンで「新バージョン」を選びます。
-4. 再度「デプロイ」を押します。
-
-既存デプロイを更新すれば、通常は同じWebアプリURLを継続利用できます。
-
-## 8. 動作確認
-
-1. ブラウザで`GAS_WEB_APP_URL?action=list`を開き、`{"success":true,"data":[]}`のようなJSONが表示されることを確認します。
-2. `index.html`を開き、カレンダーが表示されることを確認します。
-3. 日付を選択し、「この日に支出を追加」から1件登録します。
-4. スプレッドシートに行が追加され、カレンダーの合計が更新されることを確認します。
-5. 同じ明細を編集し、`createdAt`が変わらず`updatedAt`だけ更新されることを確認します。
-6. 明細を削除し、スプレッドシートとカレンダーの両方から消えることを確認します。
-7. ページを再読み込みし、スプレッドシートのデータが再取得されることを確認します。
-
-ローカルファイルとして開いた際にブラウザの制限で通信できない場合は、任意のローカルHTTPサーバーでこのフォルダを配信して確認してください。Pythonがある場合は、プロジェクトフォルダで`python -m http.server 8000`を実行し、`http://localhost:8000/`を開けます。
+1. あなたのLINEからLIFF URLを開きます。
+2. 初回の認可画面を承認します。
+3. 共有コードを入力します。
+4. `members`シートに自分が追加されたことを確認します。
+5. 彼女のLINEへLIFF URLと共有コードを別々に伝えます。
+6. 彼女も同じ共有コードで参加します。
+7. 片方が支出を追加し、もう片方が再読み込みして同じ支出を確認します。
+8. 明細に登録者名が表示されることを確認します。
+9. 追加・編集・削除後に`expenses`シートも更新されることを確認します。
 
 ## API概要
 
-- 一覧取得: `GET ?action=list`
-- 追加: `POST { "action": "create", "expense": { ... } }`
-- 更新: `POST { "action": "update", "expense": { "id": "...", ... } }`
-- 削除: `POST { "action": "delete", "id": "..." }`
+すべての操作はGAS WebアプリURLへのPOSTです。
 
-POST本文はJSON文字列です。フロントエンドは不要なカスタムHTTPヘッダーを付けずに送信します。
+- `session`：参加状態の確認
+- `join`：共有コードで家計簿へ参加
+- `list`：同じ`householdId`の支出一覧
+- `create`：支出追加。登録者は検証済みLINEユーザーから決定
+- `update`：同じ家計簿内の支出更新
+- `delete`：同じ家計簿内の支出削除
+
+IDトークンは保存・ログ出力せず、リクエストごとにLINEの検証APIで確認します。

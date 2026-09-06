@@ -61,6 +61,17 @@ h1 {
   font-size: 0.84rem;
 }
 
+.current-user {
+  width: fit-content;
+  margin: 10px 0 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: var(--line-green-dark);
+  background: var(--soft-green);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
 .calendar-card {
   position: relative;
   overflow: hidden;
@@ -328,11 +339,13 @@ h1 {
 .expense-item__category {
   grid-column: 1;
   width: fit-content;
+  max-width: 100%;
   padding: 3px 8px;
   border-radius: 999px;
   color: #59625e;
   background: #f1f4f2;
   font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 
 .expense-item__amount {
@@ -449,6 +462,17 @@ h1 {
 
 .modal__dialog--form {
   max-height: 92vh;
+}
+
+.modal__dialog--join {
+  max-width: 440px;
+}
+
+.join-description {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.7;
 }
 
 .form-field {

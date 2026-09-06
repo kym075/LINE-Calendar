@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.19/locales/ja.global.min.js" defer></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
     <script src="config.js" defer></script>
     <script src="script.js" defer></script>
   </head>
@@ -18,6 +19,7 @@
         <p class="app-label">MONTHLY EXPENSES</p>
         <h1>かんたん家計簿</h1>
         <p class="app-description">日付をタップして支出明細を確認できます</p>
+        <p id="current-user" class="current-user" hidden></p>
       </header>
 
       <section class="calendar-card" aria-label="月間支出カレンダー">
@@ -120,6 +122,27 @@
             <button class="secondary-button" type="button" data-close-modal="expense-form-modal">キャンセル</button>
             <button id="form-submit-button" class="primary-button" type="submit">登録する</button>
           </div>
+        </form>
+      </section>
+    </div>
+
+    <div id="join-modal" class="modal" aria-hidden="true">
+      <div class="modal__backdrop"></div>
+      <section class="modal__dialog modal__dialog--join" role="dialog" aria-modal="true" aria-labelledby="join-title">
+        <div class="modal__header">
+          <div>
+            <p class="modal__eyebrow">SHARED HOUSEHOLD</p>
+            <h2 id="join-title">共有家計簿に参加</h2>
+          </div>
+        </div>
+        <p class="join-description">二人で決めた共有コードを入力してください。初回のみ必要です。</p>
+        <form id="join-form" novalidate>
+          <div class="form-field">
+            <label for="join-code">共有コード <span aria-hidden="true">必須</span></label>
+            <input id="join-code" name="joinCode" type="password" maxlength="100" autocomplete="one-time-code" required />
+          </div>
+          <p id="join-error" class="form-error" role="alert" aria-live="polite"></p>
+          <button id="join-submit-button" class="primary-button primary-button--full" type="submit">参加する</button>
         </form>
       </section>
     </div>
