@@ -35,6 +35,9 @@ jobs:
           cp index.html style.css script.js _site/
           cp -R vendor _site/vendor
           printf 'window.APP_CONFIG = {\n  API_URL: "%s",\n  LIFF_ID: "%s",\n};\n' "$GAS_API_URL" "$LIFF_ID" > _site/config.js
+          sed -i "s|href=\"style.css\"|href=\"style.css?v=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\"|" _site/index.html
+          sed -i "s|src=\"config.js\"|src=\"config.js?v=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\"|" _site/index.html
+          sed -i "s|src=\"script.js\"|src=\"script.js?v=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\"|" _site/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
